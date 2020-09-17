@@ -1,0 +1,421 @@
+---
+title: "Boston Housing Price Prediction"
+date: "Spring 2020"
+output:
+  pdf_document:
+    extra_dependencies: xcolor
+  word_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(tinytex.verbose = TRUE)
+```
+
+
+
+## Background
+
+The Boston Housing Price Dataset was obtained from the StatLib library which is maintained at Carnegie Mellon University. It contains US census data concerning houses in various areas around the city of Boston.
+
+The dataset consists of 506 observations of 14 attributes. Below is a brief description of each feature and the outcome in our dataset:
+
+1. *crim* - per capita crime rate by town
+2. *zn* - proportion of residential land zoned for lots over 25,000 sq.ft
+3. *indus* - proportion of non-retail business acres per town
+4. *chas* - Charles River dummy variable (1 if tract bounds river; else 0)
+5. *nox* - nitric oxides concentration (parts per 10 million)
+6. *rm* - average number of rooms per dwelling
+7. *age* - proportion of owner-occupied units built prior to 1940
+8. *dis* - weighted distances to five Boston employment centres
+9. *rad* - index of accessibility to radial highways
+10. *tax* - full-value property-tax rate per $10,000
+11. *ptratio* - pupil-teacher ratio by town
+12. *black* - 1000(Bk - 0.63)^2 where Bk is the proportion of blacks by town
+13. *lstat* - % lower status of the population
+14. *medv* - Median value of owner-occupied homes in $1000's
+
+
+Please load the dataset "Boston" and then split the dataset into a train and test set in a 80:20 ratio. Use the training set to build the models in Questions 1-6. Use the test set to help evaluate model performance in Question 7. Please make sure that you are using R version 3.6.X.
+
+## Read Data
+
+```{r, message=F, warning=F}
+set.seed(100)
+
+fullData = read.csv("Boston.csv",header=TRUE)
+testRows = sample(nrow(fullData),0.2*nrow(fullData))
+testData = fullData[testRows, ]
+trainData = fullData[-testRows, ]
+```
+
+## Question 1: Full Model
+
+(a) Fit a standard linear regression with the variable *medv* as the response and the other variables as predictors. Call it *model1*. Display the model summary.
+
+```{r}
+m1=lm(medv~., trainData)
+summary(m1)
+
+
+
+```
+
+
+(b) Which regression coefficients are significant at the 95% confidence level? At the 99% confidence level?
+```{r, message=F, warning=F}
+set.seed(100)
+p=summary(m1)$coef[,4]
+a95=0.05
+a99=0.01
+
+p<=a95
+p<=a99
+```
+
+coefficients are significant at the 95% confidence level:  crim,zn,chas,nox, rm, dis, rad,tax,ptratio, black, lstat
+
+
+coefficients are significant at the 99% confidence level:crim, zn,chas,nox,rm, dis, rad, tax, ptraio, black, lstat
+
+
+(c) What are the 10-fold and leave one out cross-validation scores for this model?
+
+```{r, message=F, warning=F}
+set.seed(100)
+library(boot)
+n=nrow(trainData)
+attach(trainData)
+glm.fit=glm(medv~.,data=trainData)
+c(cv.glm(trainData,glm.fit,K=10)$delta[1],cv.glm(trainData,glm.fit,K=nrow(trainData))$delta[1])
+```
+10-fold CV: 23.85361
+
+leave one out cross-validation:23.82173
+
+
+(d) What are the Mallow's Cp, AIC, and BIC criterion values for this model?
+
+```{r, message=F, warning=F}
+set.seed(100)
+library(CombMSC)
+n=nrow(trainData)
+c(Cp(m1,S2=4.704^2),AIC(m1,k=2),AIC(m1,k=log(n)))
+
+```
+Mallow's Cp:13.97495
+
+AIC: 2419.28127
+
+BIC: 2479.33957
+
+
+(e) Build a new model on the training data with only the variables which coefficients were found to be statistically significant at the 99% confident level. Call it *model2*. Perform an ANOVA test to compare this new model with the full model. Which one would you prefer? Is it good practice to select variables based on statistical significance of individual coefficients? Explain.
+
+```{r}
+set.seed(100)
+
+m2=lm(medv~crim+zn+chas+nox+rm+dis+rad+tax+ptratio+black+lstat )
+summary(m2)
+anova(m1,m2)
+```
+
+After apply Anova test, p-value of 0.8683 is close to 1 means statstically not significant by reducing varibles which are not significant at 99% CI, therefor I prefer model1. It's not a good practice to select varibles based on statistical significance of individual coedfficients, because there could be other factors like complete sarperration or outliers that have influence on significance of predictor which still have very strong predicting power. 
+
+
+## Question 2: Full Model Search
+
+(a) Compare all possible models using Mallow's Cp. What is the total number of possible models with the full set of variables? Display a table indicating the variables included in the best model of each size and the corresponding Mallow's Cp value. 
+
+Hint: The table must include 13 models. You can use nbest parameter. 
+
+```{r, message=F, warning=F}
+set.seed(100)
+library(leaps)
+attach(trainData)
+outM=leaps(trainData[,-c(14)],medv,method = "Cp")
+cbind(as.matrix(outM$which),outM$Cp)[71:121,]
+bestM=which(outM$Cp==min(outM$Cp))
+cbind(as.matrix(outM$which),outM$Cp)[bestM,]
+
+
+
+
+```
+
+total possible number of model: 2^13
+
+   1 2 3 4 5 6 7 8 9 A B C D          
+1  0 0 0 0 0 0 0 0 0 0 0 0 1 298.07927
+2  0 0 0 0 0 1 0 0 0 0 0 0 1 146.92399
+3  0 0 0 0 0 1 0 0 0 0 1 0 1  87.73031
+4  0 0 0 0 0 1 0 0 0 0 1 1 1  77.39864
+5  0 0 0 0 1 1 0 1 0 0 1 0 1  50.68647
+6  0 0 0 1 1 1 0 1 0 0 1 0 1  37.41118
+7  0 1 0 1 1 1 0 1 0 0 1 0 1  31.71986
+8  0 1 0 1 1 1 0 1 0 0 1 1 1  25.32215
+9  1 1 0 1 1 1 0 1 0 0 1 1 1 22.81194
+10 1 1 0 1 1 1 0 1 1 1 1 0 1 15.20861
+11 1 1 0 1 1 1 0 1 1 1 1 1 1 10.28243
+12 1 1 1 1 1 1 0 1 1 1 1 1 1 12.00079
+13 1 1 1 1 1 1 1 1 1 1 1 1 1 14.00000
+
+(b) How many variables are in the model with the lowest Mallow's Cp value? Which variables are they? Fit this model and call it *model3*.
+
+```{r}
+set.seed(100)
+
+m3=lm(medv~ crim+zn+chas+nox+rm+dis+rad+tax+ptratio+black+lstat)
+summary(m3)
+```
+
+1 varibles model has the lowest Cp value 10.28243 , they are every predicting varibles excpet 3. indus, and 7. age. 
+
+## Question 3: Stepwise Regression
+
+(a) Perform backward stepwise regression using BIC. Allow the minimum model to be the model with only an intercept, and the full model to be *model1*. Display the model summary of your final model. Call it *model4*
+
+```{r}
+set.seed(100)
+mini=lm(medv~1)
+
+m4=step(m1,scope=list(lower=mini,upper=m1),direction = "backward",k=log(n))
+summary(m4)
+
+```
+
+
+(b) How many variables are in *model4*? Which regression coefficients are significant at the 99% confidence level?
+
+```{r}
+set.seed(100)
+p=summary(m4)$coef[,4]
+
+a99=0.01
+
+
+p<=a99
+
+```
+
+11 varibles in m4. All coefficients including intercept are siginificant at 99% CI.
+
+
+(c) Perform forward stepwise selection with AIC. Allow the minimum model to be the model with onlyan intercept, and the full model to be *model1*. Display the model summary of your final model. Call it *model5*. Do the variables included in *model5* differ from the variables in *model4*? 
+
+
+```{r}
+set.seed(100)
+m5=step(mini,scope=list(lower=mini,upper=m1),direction = "forward")
+summary(m5)
+
+```
+
+
+(d) Compare the adjusted $R^2$, Mallow's Cp, AICs and BICs of the full model(*model1*), the model found in Question 2 (*model3*), and the model found using backward selection with BIC (*model4*). Which model is preferred based on these criteria and why?
+
+```{r}
+set.seed(100)
+c(Cp(m2,S2=4.694^2),AIC(m2,k=2),AIC(m2,k=log(n)))
+c(Cp(m3,S2=4.694^2),AIC(m3,k=2),AIC(m3,k=log(n)))
+c(Cp(m4,S2=4.694^2),AIC(m4,k=2),AIC(m4,k=log(n)))
+
+```
+
+m1: adujusted r^2:  0.7325 , Mallow's Cp:13.97495, AIC: 2419.28127, BIC: 2479.33957
+
+M2: a-r^2:  0.7336 , cp:11.92619 AIC: 2415.57370 BIC:2440.43000
+
+m3: a-r^2:  0.7336 cp:11.92619 AIC: 2415.57370 BIC:2440.43000
+
+m4: a-r^2: 0.7336 , cp:11.92619 AIC: 2415.57370 BIC:2440.43000
+
+Model 2, 3 ,4 are identical. Model 2/3/4 will be choose because it has larger adjusted r suqred and smaller AIC and BIC. 
+
+## Question 4: Ridge Regression
+
+(a) Perform ridge regression on the training set. Use cv.glmnet() to find the lambda value that minimizes the cross-validation error using 10 fold CV.
+
+```{r}
+set.seed(100)
+
+library(MASS)
+library(glmnet)
+#scale  data
+#attach(testData)
+vari1=trainData[,-c(3,7,14)]
+vari=scale(vari1)
+
+
+
+sdv=scale(trainData$medv)
+ridge=cv.glmnet(vari,sdv,alpha=0,nfolds=10)
+ridge
+#answer=lm.ridge(sdv~vari,lambda=lambda)
+```
+
+
+(b) List the value of coefficients at the optimum lambda value.
+
+```{r}
+set.seed(100)
+lambda10=cv.glmnet(vari,sdv,alpha=0,nfolds=10)
+lambda100=glmnet(vari,sdv,alpha=0,nlambda=100)
+coef(lambda100,s=lambda10$lambda.min)
+```
+
+
+(c) How many variables were selected? Give an explanation for this number.
+
+11 varibles are selected. From question 3, model 2, 3 4, 5 are identical, so these 11 varibles are selected : crim, zn,chas,nox,rm, dis, rad, tax, ptraio, black, lstat. Ridge regression it self is not for model selection. 
+
+
+
+## Question 5: Lasso Regression
+
+
+(a) Perform lasso regression on the training set.Use cv.glmnet() to find the lambda value that minimizes the cross-validation error using 10 fold CV.
+
+```{r, message=F, warning=F}
+set.seed(100)
+lvari=cbind(trainData$lstat,trainData$rm,trainData$ptratio,trainData$chas,trainData$black,trainData$dis,trainData$nox,trainData$zn,trainData$crim,trainData$rad,trainData$tax)
+
+
+lasso= cv.glmnet(lvari,trainData$medv,alpha=1, nfolds=10)
+lasso
+lassom=glmnet(lvari,trainData$medv,alpha=1,nlambda=100)
+lassom
+```
+
+(b) Plot the regression coefficient path.
+
+```{r}
+set.seed(100)
+
+plot(lassom,xvar="lambda",lwd=2,label=T)
+abline(v=log(lasso$lambda.min),col="black")
+
+```
+
+
+(c) How many variables were selected? Which are they?
+
+```{r}
+set.seed(100)
+coef(lassom,s=lasso$lambda.min)
+
+
+```
+
+
+11 varibles are selected. crim+zn+chas+nox+rm+dis+rad+tax+ptratio+black+lstat
+
+## Question 6: Elastic Net
+
+(a) Perform elastic net regression on the training set. Use cv.glmnet() to find the lambda value that minimizes the cross-validation error using 10 fold CV. Give equal weight to both penalties.
+
+```{r}
+set.seed(100)
+
+ecv=cv.glmnet(lvari, trainData$medv,alpha=0.5,nfolds=10)
+em=glmnet(lvari, trainData$medv,alpha=0.5,nlambda=100)
+ecv
+em
+```
+
+
+(b) List the coefficient values at the optimal lambda. How many variables were selected? How do these variables compare to those from Lasso in Question 5?
+
+```{r}
+set.seed(100)
+
+coef(em,s=ecv$lambda.min)
+```
+11 varibles are selected, they are identical to question 5. 
+
+
+
+
+## Question 7: Model comparison
+
+(a) Predict *medv* for each of the rows in the test data using the full model, and the models found using backward stepwise regression with BIC, ridge regression, lasso regression, and elastic net.
+
+```{r}
+set.seed(100)
+m1p=predict(m1,testData[,-14],interval="prediction")
+m1p
+
+predata=testData[,-c(3,7,14)]
+BICp=predict(m4,predata, interval = "prediction")
+BICp
+
+ridgep=predict(m4,predata,interval = "prediction")
+ridgep
+
+mla=lm(medv~ crim+zn+chas+nox+rm+dis+rad+tax+ptratio+black+lstat, testData)
+
+lassp=predict(mla,predata,interval="prediction" )
+lassp
+
+me=lm(medv~ crim+zn+chas+nox+rm+dis+rad+tax+ptratio+black+lstat, testData)
+mep=predict(me,predata,interval="prediction" )
+mep
+```
+
+
+
+(b) Compare the predictions using mean squared prediction error. Which model performed the best?
+
+```{r}
+set.seed(100)
+
+a1=predict(m1, testData, interval='prediction')[,1]
+
+a4=predict(m4, predata, interval='prediction')[,1]
+
+al=predict(mla,predata,interval = 'prediction')[,1]
+
+m1m=mean((a1-testData$medv)^2)
+m4m=mean((a4-testData$medv)^2)
+alm=mean((al-testData$medv)^2)
+c(m1m,m4m,alm)
+```
+
+Since   m4 and ridge model are identical, lasso and elastic are identical, only three MSE need to be calculated. 
+
+MSE (m1)=24.51305
+
+MSE(BIC,Ridge)=24.47241
+
+MSE(lasso, elastic)=22.81797
+
+Lasso and Elastic has the smallest MSE, so they perform better. 
+
+(c) Provide a table listing each method described in Question 7a and the variables selected by each method (see Unit 5.2.3 for an example). Which variables were selected consistently?
+
+
+
+|        | Backward Stepwise | Ridge | Lasso  | Elastic Net |
+|--------|-------------|-------------------|--------|-------|
+|crim    |     x        |          x         |   x     |   x    |          
+|zn      |       x      |          x         |   x     |   x    | 
+|indus   |             |                   |        |       |        
+|chas    |    x         |          x         |    x    |   x    | 
+|nox     |    x         |          x         |    x    |   x    | 
+|rm      |    x         |          x         |    x    |   x    | 
+|age     |             |                   |        |       | 
+|dis     |    x         |           x        |     x   |   x    |
+|rad     |    x         |          x         |      x  |    x   | 
+|tax     |    x         |          x         |     x   |    x   |  
+|ptratio |     x        |          x         |     x   |   x    |
+|black   |    x         |          x         |     x   |    x   | 
+|lstat   |     x        |          x         |      x  |    x   |
+
+
+
+crim+zn+chas+nox+rm+dis+rad+tax+ptratio+black+lstat were selected constantly 
+
+
+
